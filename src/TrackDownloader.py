@@ -14,6 +14,13 @@ class TrackDownloader:
         self.download_folder.mkdir(exist_ok=True)
         self.max_workers = max_workers
 
+    def sanitize_filename(name):
+        """Удаляет недопустимые символы для файловой системы, заменяя их на безопасные."""
+        if not name:
+            return "Unknown"
+        # Заменяем недопустимые символы, включая слеши, на дефис
+        return re.sub(r'[\\/*?:"<>|]', "-", name).strip()
+
     def _fix_tags(self, file_path, artist, album=None, track_number=None):
         """Прописывает ID3-теги, включая albumartist."""
         try:
@@ -31,9 +38,11 @@ class TrackDownloader:
     def _download_single(self, url, artist_folder, album=None, track_index=None):
         """Скачивает один трек, используя id видео как временное имя."""
         # Папка назначения
+
         if album:
+            album = sanitize_filename(album)
             folder = artist_folder / album
-            folder.mkdir(exist_ok=True)
+            folder.mkdir(parents=True, exist_ok=True)
         else:
             folder = artist_folder
 
