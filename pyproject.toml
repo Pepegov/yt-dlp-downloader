@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "track-downloader"
+version = "0.1.0"
+description = "Download tracks, albums, playlists from YouTube and Soundcloud with automatic ID3 tagging"
+readme = "README.md"
+authors = [
+    {name = "Pepegov"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.6"
+dependencies = [
+    "yt-dlp",
+    "mutagen"
+]
+
+[project.scripts]
+track-downloader = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
