@@ -19,7 +19,8 @@ classifiers = [
 requires-python = ">=3.6"
 dependencies = [
     "yt-dlp",
-    "mutagen"
+    "mutagen",
+    "python-dotenv"
 ]
 
 [project.scripts]

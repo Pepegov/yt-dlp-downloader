@@ -47,7 +47,7 @@ pyenv
 .python-version
 
 #Environments
-.env
+#.env
 .venv
 env/
 venv/

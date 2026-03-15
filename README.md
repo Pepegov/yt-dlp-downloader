@@ -30,7 +30,7 @@ It automatically sets ID3 tags (artist, album, track number, albumartist), embed
 
 2. Create and activate a virtual environment:
    ```bash
-   python -m venv venv
+   python -m venv .venv
    source venv/bin/activate      # Linux/macOS
    venv\Scripts\activate         # Windows
    ```
@@ -94,13 +94,3 @@ In the `TrackDownloader.py` file you can change the parameters:
 - For playlists, `yt-dlp` is used with the `extract_flat` option, so track information is retrieved quickly without downloading.
 - The `albumartist` ID3 tag is set equal to the artist, which improves album display in players (e.g., MusicBee, foobar2000).
 - If a file with the same name already exists, a counter is added to the name (e.g., `Artist - Song_1.mp3`).
-
-## Dependencies
-
-- `yt-dlp` – downloading from YouTube and other sites
-- `mutagen` – handling ID3 tags
-
-You can install them manually:
-```bash
-pip install yt-dlp mutagen
-```
