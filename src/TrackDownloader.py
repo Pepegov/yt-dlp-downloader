@@ -21,18 +21,34 @@ class TrackDownloader:
         # Заменяем недопустимые символы, включая слеши, на дефис
         return re.sub(r'[\\/*?:"<>|]', "-", name).strip()
 
-    def _fix_tags(self, file_path, artist, album=None, track_number=None):
-        """Прописывает ID3-теги, включая albumartist."""
+    def _fix_tags(self, file_path, artist, title, album=None, track_number=None, year=None):
+        """Прописывает ID3-теги корректно для Navidrome."""
         try:
             audio = EasyID3(file_path)
         except Exception:
             audio = EasyID3()
+
+            
+
         audio["artist"] = artist
-        audio["albumartist"] = artist          # важно для группировки альбомов
-        if album:
-            audio["album"] = album
-        if track_number is not None:
-            audio["tracknumber"] = str(track_number)
+        audio["albumartist"] = artist
+        audio["title"] = title
+
+        # если альбома нет — используем название трека
+        if not album:
+            album = title
+            track_number = 1
+            audio["tracknumber"] = "1/1"
+        else:
+            if track_number is not None:
+                audio["tracknumber"] = str(track_number)
+
+        audio["album"] = album
+
+
+        if year:
+            audio["date"] = year
+
         audio.save(file_path)
 
     def _download_single(self, url, artist_folder, album=None, track_index=None):
@@ -81,6 +97,7 @@ class TrackDownloader:
         # Данные для имени файла
         artist_name = info.get("uploader") or artist_folder.name
         title = info.get("title", "Unknown Title")
+        year = info.get("release_year") or info.get("upload_date", "")[:4]
 
         # Желаемое имя
         if track_index is not None:
@@ -101,7 +118,13 @@ class TrackDownloader:
             temp_file.rename(new_path)
 
         # Прописываем теги
-        self._fix_tags(new_path, artist=artist_folder.name, album=album, track_number=track_index)
+        self._fix_tags(
+            new_path,
+            artist=artist_folder.name,
+            title=title,
+            album=album,
+            track_number=track_index
+        )
 
     def download(self, url):
         """Основной метод: загружает трек, альбом или плейлист."""
