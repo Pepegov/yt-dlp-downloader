@@ -4,56 +4,60 @@ from concurrent.futures import ThreadPoolExecutor
 from mutagen.easyid3 import EasyID3
 import re
 
+from genius_lyrics import GeniusLyricsFetcher
+from lrc_lyrics import LRCLyricsFetcher
+
+
 def sanitize_filename(name):
-    """Удаляет недопустимые для файловой системы символы."""
-    return re.sub(r'[\\/*?:"<>|]', "", name)
+    return re.sub(r'[\\/*?:"<>|]', "-", name).strip()
+
 
 class TrackDownloader:
-    def __init__(self, download_folder="downloads", max_workers=4):
+    def __init__(
+        self,
+        download_folder="downloads",
+        max_workers=4,
+        genius_lyrics_fetcher: GeniusLyricsFetcher | None = None
+    ):
         self.download_folder = Path(download_folder)
         self.download_folder.mkdir(exist_ok=True)
         self.max_workers = max_workers
 
-    def sanitize_filename(name):
-        """Удаляет недопустимые символы для файловой системы, заменяя их на безопасные."""
-        if not name:
-            return "Unknown"
-        # Заменяем недопустимые символы, включая слеши, на дефис
-        return re.sub(r'[\\/*?:"<>|]', "-", name).strip()
+        self.genius_lyrics_fetcher = genius_lyrics_fetcher
+        self.lrc_lyrics_fetcher = LRCLyricsFetcher()
 
-    def _fix_tags(self, file_path, artist, title, album=None, track_number=None, year=None):
-        """Прописывает ID3-теги корректно для Navidrome."""
+    def _fix_tags(self, file_path, artist, title, album=None, track_number=None, total_tracks=None, year=None):
         try:
             audio = EasyID3(file_path)
         except Exception:
             audio = EasyID3()
 
-            
-
         audio["artist"] = artist
         audio["albumartist"] = artist
         audio["title"] = title
 
-        # если альбома нет — используем название трека
-        if not album:
-            album = title
-            track_number = 1
-            audio["tracknumber"] = "1/1"
-        else:
-            if track_number is not None:
+        # Для тега album используем оригинальный album или title
+        album_tag = album if album is not None else title
+        audio["album"] = album_tag
+
+        # tracknumber
+        if track_number is not None:
+            if total_tracks is not None:
+                audio["tracknumber"] = f"{track_number}/{total_tracks}"
+            else:
                 audio["tracknumber"] = str(track_number)
-
-        audio["album"] = album
-
+        elif album is None:  # проверяем оригинальный album, а не изменённый
+            audio["tracknumber"] = "1/1"
 
         if year:
             audio["date"] = year
 
         audio.save(file_path)
 
-    def _download_single(self, url, artist_folder, album=None, track_index=None):
-        """Скачивает один трек, используя id видео как временное имя."""
-        # Папка назначения
+    # -------------------------
+    # DOWNLOAD
+    # -------------------------
+    def _download_single(self, url, artist_folder, album=None, track_index=None, total_tracks=1):
 
         if album:
             album = sanitize_filename(album)
@@ -62,7 +66,6 @@ class TrackDownloader:
         else:
             folder = artist_folder
 
-        # Временное имя на основе id видео
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": str(folder / "%(id)s.%(ext)s"),
@@ -80,27 +83,13 @@ class TrackDownloader:
             info = ydl.extract_info(url, download=True)
 
         video_id = info.get("id")
-        if not video_id:
-            print(f"Не удалось получить ID видео для {url}")
-            return
-
-        # Ищем временный mp3-файл
         temp_file = folder / f"{video_id}.mp3"
-        if not temp_file.exists():
-            candidates = list(folder.glob(f"{video_id}.*"))
-            if candidates:
-                temp_file = candidates[0]
-            else:
-                print(f"Файл для {video_id} не найден")
-                return
 
-        # Данные для имени файла
         artist_name = info.get("uploader") or artist_folder.name
         title = info.get("title", "Unknown Title")
         year = info.get("release_year") or info.get("upload_date", "")[:4]
 
-        # Желаемое имя
-        if track_index is not None:
+        if track_index:
             new_name = f"{track_index:02d} - {artist_name} - {title}.mp3"
         else:
             new_name = f"{artist_name} - {title}.mp3"
@@ -108,7 +97,6 @@ class TrackDownloader:
         new_name = sanitize_filename(new_name)
         new_path = folder / new_name
 
-        # Переименование, если имя не совпадает (с защитой от дубликатов)
         if temp_file != new_path:
             counter = 1
             base = new_path.stem
@@ -117,29 +105,31 @@ class TrackDownloader:
                 counter += 1
             temp_file.rename(new_path)
 
-        # Прописываем теги
         self._fix_tags(
             new_path,
             artist=artist_folder.name,
             title=title,
             album=album,
-            track_number=track_index
+            track_number=track_index,
+            year=year,
+            total_tracks=total_tracks
         )
 
+        # 🎵 lyrics (если включены)
+        if (self.genius_lyrics_fetcher is not None):
+            self.genius_lyrics_fetcher._add_unsync_lyrics(new_path, artist_folder.name, title)
+        if (self.lrc_lyrics_fetcher is not None):
+            self.lrc_lyrics_fetcher.add_lyrics(new_path, artist_folder.name, title)
+
     def download(self, url):
-        """Основной метод: загружает трек, альбом или плейлист."""
-        # Быстрое получение информации (без скачивания)
         with yt_dlp.YoutubeDL({"extract_flat": True}) as ydl:
             info = ydl.extract_info(url, download=False)
 
-        # Определяем тип контента
         if "entries" in info:
-            # Плейлист / альбом
             artist = info.get("uploader") or "Unknown Artist"
             album = info.get("title")
             entries = info["entries"]
         else:
-            # Одиночный трек
             artist = info.get("uploader") or "Unknown Artist"
             album = info.get("album")
             entries = [info]
@@ -147,23 +137,23 @@ class TrackDownloader:
         artist_folder = self.download_folder / artist
         artist_folder.mkdir(exist_ok=True)
 
-        if len(entries) == 1 and "url" in entries[0]:
-            # Одиночный трек
-            track_url = entries[0].get("webpage_url") or entries[0].get("url") or url
-            self._download_single(track_url, artist_folder, album)
+        if len(entries) == 1:
+            self._download_single(url, artist_folder, album)
         else:
-            # Множество треков
-            print(f"Найдено {len(entries)} треков у исполнителя '{artist}'"
-                  f"{' в альбоме ' + album if album else ''}. Начинаю скачивание...")
-
+            total = len(entries)
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 futures = []
                 for i, entry in enumerate(entries, start=1):
                     track_url = entry.get("webpage_url") or entry.get("url")
                     if not track_url:
                         continue
-                    idx = entry.get("playlist_index", i)
                     futures.append(executor.submit(
-                        self._download_single, track_url, artist_folder, album, idx))
+                        self._download_single,
+                        track_url,
+                        artist_folder,
+                        album,
+                        i,
+                        total 
+                    ))
                 for f in futures:
-                    f.result()   # чтобы увидеть возможные ошибки
+                    f.result()

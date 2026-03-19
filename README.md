@@ -1,7 +1,8 @@
+
 # Track Downloader
 
 A script for downloading audio tracks, albums, and playlists from Spotify and YouTube (and other platforms supported by `yt-dlp`).  
-It automatically sets ID3 tags (artist, album, track number, albumartist), embeds the thumbnail, and saves files into a structured folder.
+It automatically sets ID3 tags (artist, album, track number, albumartist), embeds the thumbnail, **downloads and embeds song lyrics** into the tags, and saves files into a structured folder.
 
 ## Features
 
@@ -10,6 +11,10 @@ It automatically sets ID3 tags (artist, album, track number, albumartist), embed
 - Convert to MP3 with 192 kbps bitrate.
 - Embed thumbnail into the file.
 - Set tags: `artist`, `album`, `tracknumber`, `albumartist` (for correct grouping in players).
+- Automatic lyrics fetching:
+  - Synced lyrics (LRC) are retrieved from **lrclib.net** and saved into the ID3 `SYLT` tag.
+  - Unsynced (plain) lyrics are also retrieved from **lrclib.net** and saved into the `USLT` tag.
+  - If a Genius Token is provided, unsynced lyrics will be fetched from **Genius** (which often has a more comprehensive database), while synced lyrics still come from lrclib.net.
 - File naming template:  
   - For album tracks: `{number:02d} - {artist} - {title}.mp3`  
   - For single tracks: `{artist} - {title}.mp3`
@@ -50,7 +55,8 @@ It automatically sets ID3 tags (artist, album, track number, albumartist), embed
 ```bash
 python src/main.py
 ```
-The program will ask for a link to a track, album, or playlist. After entering it, downloading will start.
+The program will ask for a link to a track, album, or playlist. After entering it, downloading will start.  
+After each track is downloaded, the script automatically searches for lyrics: first synced, then unsynced. Any found lyrics are added to the file's ID3 tags.
 
 ### Run via installed command
 If you installed the package with `pip install -e .`, you can use the command:
@@ -84,13 +90,26 @@ downloads/
 
 ## Configuration
 
-In the `TrackDownloader.py` file you can change the parameters:
+Configuration is done via environment variables or a `.env` file in the project root.
 
-- `download_folder` – folder for saving (default `"downloads"`)
-- `max_workers` – number of parallel threads (default 4)
+- `DOWNLOAD_FOLDER` – download folder (default: `downloads`)
+- `MAX_WORKERS` – number of parallel threads (default: 4)
+- `GENIUS_TOKEN` – **optional**. Genius API access token. If provided, unsynced lyrics will be fetched from Genius (which often has a larger database).  
+  How to get a token: [Genius API Clients](https://genius.com/api-clients)
+
+Example `.env` file:
+```
+DOWNLOAD_FOLDER=downloads
+MAX_WORKERS=10
+GENIUS_TOKEN=your_token_here
+```
 
 ## Notes
 
 - For playlists, `yt-dlp` is used with the `extract_flat` option, so track information is retrieved quickly without downloading.
 - The `albumartist` ID3 tag is set equal to the artist, which improves album display in players (e.g., MusicBee, foobar2000).
 - If a file with the same name already exists, a counter is added to the name (e.g., `Artist - Song_1.mp3`).
+- Lyrics are added to ID3 tags:
+  - Synced lyrics → `SYLT` (millisecond format)
+  - Unsynced lyrics → `USLT` (Unsynced Lyrics)
+- To use Genius, the `lyricsgenius` package is required (already included in `requirements.txt`).

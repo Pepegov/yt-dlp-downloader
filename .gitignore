@@ -57,6 +57,10 @@ mypy
 .dmypy.json
 dmypy.json
 
+# variables
+.env
+.env.local
+
 #IDE
 .idea/
 .vscode/
